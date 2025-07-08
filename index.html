@@ -99,12 +99,12 @@
     <button onclick="generateVideo()">Generate Video</button>
 
     <div class="video-section" id="videoSection">
-      <!-- Spinner or video will be inserted here -->
+      <!-- Spinner or video will appear here -->
     </div>
   </div>
 
   <script>
-    // Replace with your actual API key (do NOT expose in production)
+    // ⚠️ Do NOT expose API keys in production.
     const API_KEY = 'key_45fb6b3d06c140a587d1d6998f77d3103cdd4b94f47cf94a22c1350a5b872381dc4f1d52ae7802133014e8bb650eea335fbccba1e564069a473fa5c32a63dd77';
     const ENDPOINT = 'https://api.runwayml.com/v1/gen2/video';
 
@@ -127,6 +127,7 @@
       videoSection.appendChild(spinner);
 
       try {
+        // Step 1: Send generation request
         const response = await fetch(ENDPOINT, {
           method: 'POST',
           headers: {
@@ -139,19 +140,19 @@
         });
 
         if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
+          throw new Error(`API error: ${response.status}`);
         }
 
         const data = await response.json();
 
-        // Replace with actual key path to video URL based on API's response
+        // Adjust this based on actual API structure
         const videoUrl = data?.video_url || data?.output?.url;
 
         if (!videoUrl) {
           throw new Error('No video URL returned from API.');
         }
 
-        // Show the video
+        // Step 2: Display video
         const video = document.createElement('video');
         video.controls = true;
         video.src = videoUrl;
