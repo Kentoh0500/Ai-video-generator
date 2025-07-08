@@ -5,108 +5,85 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Pro Video Generator</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      min-height: 100vh;
-      background: #f7f9fc;
       padding: 20px;
+      background: #f4f7fc;
     }
     header {
       font-size: 2rem;
-      font-weight: bold;
       margin-bottom: 20px;
       color: #333;
     }
     .container {
       width: 100%;
       max-width: 600px;
-      background: white;
+      background: #fff;
       border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 15px;
     }
     textarea {
-      width: 100%;
       height: 100px;
+      resize: none;
       padding: 10px;
       font-size: 1rem;
-      border: 1px solid #ccc;
       border-radius: 8px;
-      resize: none;
+      border: 1px solid #ccc;
     }
     button {
       padding: 12px;
       font-size: 1rem;
-      background-color: #0077ff;
-      color: white;
       border: none;
       border-radius: 8px;
+      background: #0077ff;
+      color: white;
       cursor: pointer;
-      transition: background 0.3s;
     }
     button:hover {
-      background-color: #005fd1;
-    }
-    .video-section {
-      margin-top: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    video {
-      width: 100%;
-      max-width: 100%;
-      border-radius: 10px;
-      margin-top: 10px;
+      background: #005fd1;
     }
     .spinner {
       width: 40px;
       height: 40px;
-      border: 5px solid rgba(0, 0, 0, 0.1);
-      border-top-color: #0077ff;
+      border: 5px solid rgba(0,0,0,0.1);
+      border-top: 5px solid #0077ff;
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin-top: 10px;
     }
     @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
+      to { transform: rotate(360deg); }
     }
-    .error {
-      color: red;
-      margin-top: 10px;
+    video {
+      width: 100%;
+      margin-top: 20px;
+      border-radius: 10px;
     }
+    .error { color: red; margin-top: 10px; }
   </style>
 </head>
 <body>
 
   <header>Pro Video Generator</header>
-
   <div class="container">
     <textarea id="promptInput" placeholder="Enter your creative video prompt here..."></textarea>
     <button onclick="generateVideo()">Generate Video</button>
-
-    <div class="video-section" id="videoSection">
-      <!-- Spinner or video will appear here -->
-    </div>
+    <div id="videoSection"></div>
   </div>
 
   <script>
-    // ⚠️ Do NOT expose API keys in production.
+    // ⚠️ Replace with your actual API key (keep private in production)
     const API_KEY = 'key_45fb6b3d06c140a587d1d6998f77d3103cdd4b94f47cf94a22c1350a5b872381dc4f1d52ae7802133014e8bb650eea335fbccba1e564069a473fa5c32a63dd77';
-    const ENDPOINT = 'https://api.runwayml.com/v1/gen2/video';
+    const API_URL = 'https://api.runwayml.com/v1/';
 
     async function generateVideo() {
       const prompt = document.getElementById('promptInput').value.trim();
@@ -114,10 +91,7 @@
       videoSection.innerHTML = '';
 
       if (!prompt) {
-        const err = document.createElement('div');
-        err.className = 'error';
-        err.textContent = 'Please enter a prompt.';
-        videoSection.appendChild(err);
+        videoSection.innerHTML = `<div class="error">Please enter a prompt.</div>`;
         return;
       }
 
@@ -127,44 +101,60 @@
       videoSection.appendChild(spinner);
 
       try {
-        // Step 1: Send generation request
-        const response = await fetch(ENDPOINT, {
+        // STEP 1: Submit generation request
+        const res = await fetch(`${API_URL}gen2/video`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${API_KEY}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            prompt: prompt
+            prompt: prompt,
+            mode: "text-to-video"
           })
         });
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to start video generation.");
         }
 
-        const data = await response.json();
+        const runId = data.id || data.run_id;
+        if (!runId) throw new Error("Run ID not returned.");
 
-        // Adjust this based on actual API structure
-        const videoUrl = data?.video_url || data?.output?.url;
+        // STEP 2: Poll for status
+        let status = "queued";
+        let videoUrl = null;
+        let retries = 0;
 
-        if (!videoUrl) {
-          throw new Error('No video URL returned from API.');
+        while (status !== "succeeded" && retries < 20) {
+          await new Promise(r => setTimeout(r, 4000)); // Wait 4s between polls
+
+          const statusRes = await fetch(`${API_URL}runs/${runId}`, {
+            headers: {
+              'Authorization': `Bearer ${API_KEY}`
+            }
+          });
+
+          const statusData = await statusRes.json();
+          status = statusData.status;
+
+          if (status === "succeeded") {
+            videoUrl = statusData.output?.video || statusData.output?.url;
+            break;
+          }
+
+          if (status === "failed") throw new Error("Video generation failed.");
+          retries++;
         }
 
-        // Step 2: Display video
-        const video = document.createElement('video');
-        video.controls = true;
-        video.src = videoUrl;
-        videoSection.innerHTML = ''; // Clear spinner
-        videoSection.appendChild(video);
+        if (!videoUrl) throw new Error("Video not ready. Try again later.");
 
-      } catch (error) {
-        videoSection.innerHTML = '';
-        const err = document.createElement('div');
-        err.className = 'error';
-        err.textContent = 'Error: ' + error.message;
-        videoSection.appendChild(err);
+        videoSection.innerHTML = `<video controls src="${videoUrl}"></video>`;
+
+      } catch (err) {
+        videoSection.innerHTML = `<div class="error">${err.message}</div>`;
       }
     }
   </script>
